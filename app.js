@@ -258,28 +258,36 @@
     const bad = [...form.querySelectorAll('[required]')].filter(el => !el.value.trim() || (el.type === 'email' && !/^\S+@\S+\.\S+$/.test(el.value)) || (el.type === 'tel' && el.value.replace(/\D/g, '').length < 10));
     form.querySelectorAll('.f').forEach(f => f.classList.remove('is-bad'));
     bad.forEach(el => el.closest('.f').classList.add('is-bad'));
+    $('#fErr').textContent = 'Preencha os campos destacados, por favor.';
     $('#fErr').hidden = !bad.length;
     if (bad.length) { bad[0].focus(); track('sample_form_error', { fields: bad.map(b => b.name).join(',') }); return; }
     const d = Object.fromEntries(new FormData(form));
     const mm = M.find(m => m.id === d.model);
     const msg = [
-      '*Pedido de amostra grátis*',
-      `Negócio: ${d.business}`, `O que faz: ${d.niche}`, `Cidade/Estado: ${d.city}`,
-      `WhatsApp: ${d.phone}`, `E-mail: ${d.email}`,
+      'Pedido de amostra grátis (landing page)',
+      `O que faz: ${d.niche}`, `Cidade/Estado: ${d.city}`,
       `Modelo que gostou: ${mm ? mm.name : 'Ainda não sei'}`,
       d.link ? `Site/Instagram: ${d.link}` : '', d.notes ? `Observações: ${d.notes}` : ''
     ].filter(Boolean).join('\n');
-    track('sample_form_submit', { model: d.model || 'none', niche: d.niche, city: d.city });
-    if (wa) {
-      window.open(`https://wa.me/${wa}?text=${encodeURIComponent(msg)}`, '_blank', 'noopener');
-      $('#fOkTxt').textContent = 'Abrimos o WhatsApp com o seu pedido. É só enviar a mensagem para a gente começar a sua amostra.';
-    } else if (C.email) {
-      location.href = `mailto:${C.email}?subject=${encodeURIComponent('Pedido de amostra grátis: ' + d.business)}&body=${encodeURIComponent(msg)}`;
-      $('#fOkTxt').textContent = 'Abrimos o seu e-mail com o pedido. É só enviar para a gente começar a sua amostra.';
-    } else {
-      $('#fOkTxt').textContent = 'Recebemos os dados do seu pedido. (Prévia: o WhatsApp da agência ainda não foi configurado nesta página.)';
-    }
-    form.hidden = true; ok.hidden = false; ok.focus && ok.setAttribute('tabindex', '-1'); ok.focus();
+    const btn = form.querySelector('.f-submit'), label = btn.innerHTML;
+    btn.disabled = true; btn.textContent = 'Enviando…';
+    fetch(window.LEADS_URL, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        nome: d.name, empresa: d.business, whatsapp: d.phone, email: d.email,
+        interesses: ['Landing page ou site'], origem: 'LP Marketing Vision',
+        mensagem: msg, site: d.website || '', t: Math.round(performance.now())
+      })
+    }).then(r => {
+      if (!r.ok) throw new Error(r.status);
+      track('sample_form_submit', { model: d.model || 'none', niche: d.niche, city: d.city });
+      form.hidden = true; ok.hidden = false; ok.setAttribute('tabindex', '-1'); ok.focus();
+    }).catch(() => {
+      track('sample_form_fail');
+      const err = $('#fErr');
+      err.textContent = 'Não conseguimos enviar agora. Confira sua internet e tente de novo, por favor.';
+      err.hidden = false;
+    }).finally(() => { btn.disabled = false; btn.innerHTML = label; });
   });
   $('#fAgain').addEventListener('click', () => { ok.hidden = true; form.hidden = false; form.querySelector('input').focus(); });
 
